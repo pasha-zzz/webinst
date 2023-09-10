@@ -1,0 +1,627 @@
+#!/usr/bin/haserl --shell=/bin/bash --upload-limit=1048576 --upload-dir=/tmp
+Content-type: text/html
+<html lang="ru">
+<%in hemufn  %>
+<head>
+<script type="text/javascript" src="/hemujs"></script>
+<link rel="stylesheet" type="text/css" href="/hemu.css">
+<meta http-equiv='Content-Type' content='text/html; charset=utf-8'/> 
+</head>
+<body>
+<div class="sidenav">
+  <a href="/cgi-bin/hemu?page=status">Статус</a>
+  <button class="dn-btn">HASP LM
+   <i class="fa fa-caret-down"></i> 
+  </button>
+  <div class="dn-container">
+    <a href="/cgi-bin/hemu?page=config_hasplm">Параметры</a>
+    <a href="/cgi-bin/hemu?page=srv_hasplm">Служба</a>
+  </div>
+  <button class="dn-btn">Дампы ключей
+    <i class="fa fa-caret-down"></i>
+  </button>
+  <div class="dn-container"> 
+	<%  last_cnt=$(num_cnts)
+	if [[ "$last_cnt" -gt "0" ]]; then
+	for (( nc=1; nc <= $last_cnt; nc++)) ; do
+	echo "<button class=\"dn-btn\">Контейнер $nc"
+	echo "<i class=\"fa fa-caret-down\"></i>"
+	echo "</button>"
+	echo "<div class=\"dn-container\">"
+	echo "<a href=\"/cgi-bin/hemu?page=cnt_ls_$nc\">Ключи</a>"
+	echo "<a href=\"/cgi-bin/hemu?page=cnt_adk_$nc\">Добавить ключ</a>"
+	echo "<a href=\"/cgi-bin/hemu?page=srv_usbhaspd@$nc\">Служба</a>"
+	if test "$nc" = "$last_cnt" ; then
+	  echo "<a href=\"/cgi-bin/hemu?page=del_cont\">Удалить контейнер</a>"
+	fi
+	echo "</div>"
+	done
+	fi
+	%>
+    <a href="/cgi-bin/hemu?page=new_cont">Новый контейнер</a>
+    </div>
+<% if [[ -f /usr/local/bin/usbsrv ]]; then %>
+    <button class="dn-btn">USB редиректор
+      <i class="fa fa-caret-down"></i>
+    </button>
+    <div class="dn-container">
+      <a href="/cgi-bin/hemu?page=lst_usbr">Состояние</a>
+      <a href="/cgi-bin/hemu?page=set_usbr">Настройки</a>
+      <a href="/cgi-bin/hemu?page=srv_usbsrvd">Служба</a>
+    </div>
+<% fi %>
+<% if [[ -x $(which $vh_mod) ]]; then %>
+    <button class="dn-btn">VirtualHere
+      <i class="fa fa-caret-down"></i>
+    </button>
+    <div class="dn-container">
+      <a href="/cgi-bin/hemu?page=act_virth">Активация</a>
+      <a href="/cgi-bin/hemu?page=srv_virtualhere">Служба</a>
+<% systemctl is-active --quiet "virtualhere"
+if [ "$?" = "0" ];   then %>
+      <a href="/cgi-bin/hemu?page=vh_keys">Ключи</a>
+<% fi %>
+    </div>
+<% fi %>
+   <button class="dn-btn">Система
+    <i class="fa fa-caret-down"></i>
+  </button>
+  <div class="dn-container">
+    <a href="/cgi-bin/hemu?page=net_set">Сеть, TZ</a>
+<% if [[ -f /usr/sbin/smbd ]]; then %>
+    <a href="/cgi-bin/hemex?page=samba">Общая папка самбы</a>
+<% fi %>
+<% if [[ -f /usr/sbin/ufw ]]; then %>
+    <a href="/cgi-bin/hemex?page=fwl_set">Файервол</a>
+<% fi %>
+    <a href="/cgi-bin/hemu?page=do_cmd">Выполнить команду</a>
+    <a href="/cgi-bin/hemu?page=send_file">Отправить файл</a>
+    <a href="/cgi-bin/hemex?page=clea_down">Очистка загрузок</a>
+    <a href="/cgi-bin/hemu?page=get_file">Получить файл</a>
+    <a href="/cgi-bin/hemu?page=pwr_vm">Питалово VM</a>
+    <a href="/cgi-bin/hemu?page=sys_notready">Сброс к дефолту</a>
+    <a href="/cgi-bin/hemu?page=sys_update">Обновление</a>
+    <a href="/cgi-bin/hemex?page=log_view">Логи</a>
+    <a href="/cgi-bin/hemex?page=auth_lvl">Уровень авторизации</a>
+<% if [[ "$authlevel" -gt "0" ]]; then %>    
+    <a href="/cgi-bin/hemex?page=log_off">Выход</a>
+<% fi %>    
+  </div>
+</div>
+<div class="main">  <h2><font color=#748d69>HASP Эмулятор  <% hostname %> v.<% he_ver %></font></h2>
+<% if test "$FORM_page" = "status"; then 
+ [[ "$authlevel" -gt "0" ]] && need_auth 
+ if [[ -f /tmp/up.log ]]; then
+  msg=$(cat /tmp/up.log); rm /tmp/up.log
+  amsg "$msg"
+ fi
+%>
+<pre>
+<% os_rls="$(uname -rm ). $(lsb_release -is): $(lsb_release -r|awk '{print $2}')" %>
+<b>Система:</b> Ядро <%= "$os_rls" %> Веб v.<%= "$webver" %> 
+<b>Статус</b>
+<% hstat %>
+<b>Ресурсоёмкие процессы</b>
+<% ps -eo pid,ppid,cmd,%mem,%cpu --sort=-%mem | head %>
+ </pre>
+<% fi %>
+
+<% if test "$FORM_page" = "auth_reg"; then   
+bakurl="/$(echo $HTTP_REFERER |cut -d/ -f4-)" 
+mkform 
+[[ "$authlevel" -lt "3" ]] && t4reg="10" || t4reg="1"
+%>
+<p><b>Авторизация (на <%= $t4reg %> мин. бездействия)</b><br>
+Введите пароль root(а)</p>
+ <input type="hidden" id="bakId" name="bakId" value="<%= $bakurl %>" />
+<input type="password" width="10" name="pass_control" autofocus>
+<input type=submit value=Войти>
+</form>
+</p>
+<% fi %>
+
+<% if test -n "$FORM_bakId" ; then 
+  if test -n "$FORM_pass_control" ; then 
+   ck_pwd "$FORM_pass_control" 
+   if [ $? -eq "1" ] ; then
+     #[[ "$authlevel" -lt "3" ]] && 
+     echo $(blkid|cut -d '"' -f2|md5sum|head -c 24) > /tmp/cokie &&  chmod og-r /tmp/cokie ;
+      if [[ "$FORM_bakId" =~ "log_off" ]] || [[ "$FORM_bakId" == "/cgi-bin/hemu" ]]; then gotopage "$rwcgi=status"; else gotopage "$FORM_bakId"; fi
+    fi 
+  fi
+  gotopage "$rwcgi=auth_reg" "Пароль неверен!!" 
+fi %>
+
+<%# ===  %>
+<% if test "$FORM_page" = "config_hasplm"; then 
+ [[ "$authlevel" -gt "1" ]] && need_auth
+mkform 
+cnt_cfg=$(cat /etc/hasplm/hasplm.conf|sed '/^[[:space:]]*$/d;/^;/d') 
+num_lines=$(cat /etc/hasplm/hasplm.conf|sed '/^[[:space:]]$/d;/^;/d'|wc -l) 
+num_usr=$(echo "$cnt_cfg"|grep NHS_USERLIST|cut -d= -f2) 
+lm_name=$(echo "$cnt_cfg"|grep NHS_SERVERNAMES|cut -d= -f2-) 
+lm_ips=$(echo "$cnt_cfg"|grep NHS_IP_LIMIT|cut -d= -f2-) %>
+<b>Максимальное количество пользователей</b><br>
+  NHS_USERLIST <input  type="text" pattern="^[1-9][0-9]{0,2}$" name="usr_num" id="usr_num"  value="<%= $num_usr %>" size="3"><br>
+  <b>Имя менеджера лицензий</b><br>
+  NHS_SERVERNAMES <input  type="text" pattern="((^|( ){0,},( ){0,})([a-zA-Z][a-zA-Z0-9]{0,6})){1,6}$" name="lm_nm" id="lm_nm" value="<%= $lm_name %>" size="40"><br>
+  Можно указать не более 6 имен, разделенных запятой. Каждое не длиннее 7 символов.<br>
+  Имена серверов должны соответствовать именам, которые запрашивает клиент.<br>
+  <b>Сетевой диапазон</b> станций, обслуживаемых HASP LM<br>
+  NHS_IP_LIMIT <input type="text" 
+  pattern="((^|( ){0,},( ){0,})([0-9]{1,3}\.[0-9]{1,3}\.(\*|[0-9]{1,3})\.(\*|[0-9]{1,3}((-|\/)[0-9]{1,3}){0,1}))){1,}$"
+  name="lm_net" id="lm_net" value="<%= $lm_ips %>" size="55"><br>
+  Возможные значения: ipAddr, ipAddr,... <br>
+При этом: последний параметр в IP может быть диапазоном (например, 10-120);<br>
+последние параметры в IP могут быть заменены звездочкой, но не в середине <br>
+(например,можно 192.168.*.*, но нельзя 192.168.*.25); <br>
+дополнительная маска может быть задана как 192.168.0.0/22.<br>
+Пример: 192.168.0.11, 192.168.0.*, 192.168.0.1-32, 192.168.0.0/22
+<input type=hidden name="o_lmnm" value="<%= $lm_name %>" >
+<input type=hidden name="o_lmun" value="<%= $num_usr %>" >
+<input type=hidden name="o_lmnet" value="<%= $lm_ips %>" >
+<p> <input type="submit" id="lmcsBtn" value="Применить"></p>
+Действующие опции HASP LM в hasplm.conf<br>
+<textarea readonly id="hlmconf"  name="hasplmconf" wrap="virtual" cols="80" rows="<%= $num_lines %>"><%= "$cnt_cfg" %></textarea><br>
+</form>
+<% fi %>
+
+<% if test -n "$FORM_usr_num"; then 
+  [[ "$FORM_usr_num" != "$FORM_o_lmun" ]] && rv=$(hasplm_ulist "$FORM_usr_num")
+  [[ "$FORM_lm_nm" != "$FORM_o_lmnm" ]] && rv=$(hasplm_srvname "$FORM_lm_nm")
+  [[ "$FORM_lm_net" != "$FORM_o_lmnet" ]] && rv=$(hasplm_lmnet "$FORM_lm_net")
+  if [ -z $rv ] ; then
+    amsg "Настройки HASP LM не изменились"
+  else
+    restartsrv "hasplm"
+    amsg "Настройки HASP LM сохранены"
+  fi
+fi %>
+
+<% if [[ "$FORM_page" =~ "srv_"* ]]; then
+ [[ "$authlevel" -gt "2" ]] && need_auth
+serv=$FORM_page
+serv=${serv:4}
+ mkform  %>
+<p>Служба <%= $serv %> </p>
+<% s_on=$(isactsrv "$serv")
+[[ "$s_on" -gt '0' ]] && prefa="Не з" || prefa="З" ;
+s_en=$(isenasrv "$serv")
+[[ "$s_en" -gt '0' ]] && suffe="нет" || suffe="да";
+[[ "$s_on" -gt '0' ]] && fstcb="Запустить" || fstcb="Остановить" ;
+[[ "$s_en" -gt '0' ]] && skndcb="В" || skndcb="От"; %>
+<p>Состояние: <%= "$prefaапущена" %>,  <%= "Автостарт - $suffe." %> </p>
+<input type=hidden name=sr_go value="<%= "$s_on" %>">
+<input type=hidden name=sr_ena value="<%= "$s_en" %>">
+<input type=hidden name=sr_nam value="<%= "$serv" %>">
+<p>
+<% if [[ "$s_on" -gt '0' ]] ; then %>
+<%= "$fstcb" %> <input type="checkbox" name="lm_togo" >
+<% else %>
+<input type="radio" name="act_sr" value="stp"/>  <%= "$fstcb" %></p><p>
+<input type="radio" name="act_sr" value="rst"/>  Перезапустить
+<% fi %>
+</p><p><%= "$skndcbключить автостарт" %>  <input type="checkbox" name="lm_toena" >
+</p>
+<p>   <input type=submit value="Применить" ></p>
+ <% if [[ "$serv" =~ "usbhaspd"* ]] ; then
+ nhsrv=${serv:9}
+ if [[ "$nhsrv" -lt $(num_cnts) ]]; then  %>
+<p> Манипуляция сервисами контейнеров может привести<br>к изменению привязки ключей к шинам<br>
+Поэтому отключать промежуточный (не последний) контейнер не следует.<br>
+В противном случае придется перенастраивать USB редиректор.</p>
+ <% fi %>
+<% fi %>
+</form>
+<% fi %>
+
+<% if test -n "$FORM_sr_go"; then
+serv="$FORM_sr_nam"
+  if test "$FORM_lm_togo" = "on" ; then 
+     wmsg
+     startsrv "$serv"; 
+     [[ "$serv" = "usbsrvd" ]] && restartconts
+     [[ "$serv" =~ "usbhaspd"* ]] && restartsrv "hasplm" && restartsrv "virtualhere"
+  fi
+  if test "$FORM_act_sr" = "stp" ; then stopsrv "$serv"; fi
+  if test "$FORM_act_sr" = "rst" ; then
+    wmsg
+    restartsrv "$serv"; 
+    [[ "$serv" = "usbsrvd" ]] && restartconts
+  fi
+  if  test "$FORM_lm_toena" = "on" ; then
+    if [[ "$FORM_sr_ena" -gt "0" ]]; then  enablesrv "$serv"; else  disablesrv "$serv"; fi
+  fi
+  gotopage "$rwcgi=srv_$serv"
+fi %>
+
+<% if [[ "$FORM_page" =~ "cnt_"* ]]; then 
+ [[ "$authlevel" -gt "2" ]] && need_auth
+  c_num=$(echo "$FORM_page"|cut -d_ -f3) 
+  num_keys_in_cnt=$(ls -l /etc/usbhaspd/keys/$c_num/*.json  | wc -l) 
+  last_cnt=$(num_cnts) 
+  if [[ "$FORM_page" =~ "cnt_ls_"* ]]; then 
+    nodel=""; if [[ "$num_keys_in_cnt" = "1" ]] && [[ "$c_num" -lt "$last_cnt" ]] ; then nodel="disabled"; fi 
+    mkform %>
+<p>Контейнер <%= $c_num %> Загружены ключи:</p>
+<% 
+for kf in /etc/usbhaspd/keys/$c_num/*.json; do echo "$kf"|cut -d/ -f6- |sed 's/.json/<br>/g'; done
+%>
+<p><input type="checkbox"  name="clear_usbr" checked> При удалении удалить и из USB редиректора</p>  
+<p>Если ключ удаляется временно, с последующим возвратом в контейнер,<br> 
+то из USB редиректора можно не убирать записи о ключе, в противном<br> 
+случае удалите, чтобы там не светились отсутствующие ключи.<br> </p>
+<select name="num_key" required="required"  <%= $nodel %>>
+  <option value="">Выберите ключ для удаления</option>
+<% for kn in /etc/usbhaspd/keys/$c_num/*.json; do
+kmn=$(echo "$kn"|cut -d/ -f6- |sed 's/.json//g'); vl=$(echo "$kmn"|cut -d. -f1);
+echo  "<option value='$vl'>$kmn</option>"; done %>
+</select>
+
+<input type=submit value=" Удалить ключ" <%= $nodel %> >
+<input type="hidden" id="cnumId" name="cnt_num" value="<%= $c_num %>"  />
+</form>
+<% fi %>
+<% if [[ "$FORM_page" =~ "cnt_adk_"* ]]; then 
+[[ "$authlevel" -gt "2" ]] && need_auth
+mkform %>
+<p>Текущие ключи контейнера <%= $c_num %></p>
+<textarea name="addemu" wrap="virtual" cols="50" rows="8">
+<% ls /etc/usbhaspd/keys/$c_num/*.json|cut -d/ -f6- %>
+</textarea><br><br>
+<select name="k_type" required="required">
+  <option value="">Выберите тип ключа</option>
+  <option value="x32">x32</option>
+  <option value="x64">x64</option>
+  <option value="loc1">loc1</option>
+  <option value="net5">net5</option>
+  <option value="net10">net10</option>
+  <option value="net20">net20</option>
+  <option value="net50">net50</option>
+  <option value="net100">net100</option>
+  <option value="net300">net300</option>
+  <option value="net500">net500</option>
+</select>
+<input type="hidden" id="cnumId" name="cnt_num" value="<%= $c_num %>" />
+<input type=submit value="Выбрать ключ" >
+</form>
+	<% fi %>
+<% fi %>
+
+<% if test -n "$FORM_k_type"; then 
+ mkform %>
+<p>Текущие ключи контейнера <%= $FORM_cnt_num %></p>
+<p>	<textarea name="ktyp" wrap="virtual" cols="50" rows="8">
+<% ls /etc/usbhaspd/keys/$FORM_cnt_num/*.json|cut -d/ -f6- %>
+</textarea>	</p><br>
+<% selkeybytype $FORM_k_type %>
+<input type=submit value="Добавить ключ" >
+<input type="hidden" id="cnum2Id" name="cnt_num2" value="<%= $FORM_cnt_num %>" />
+</form>
+<% fi %>
+
+<% if test -n "$FORM_key_sel"; then
+  adddumpkey $FORM_key_sel $FORM_cnt_num2 ;
+  gotopage "$rwcgi=cnt_adk_$FORM_cnt_num2"
+fi %>
+<% if test -n "$FORM_num_key" ; then del_cnt_key "$FORM_num_key" "$FORM_cnt_num" "$FORM_clear_usbr" ; fi %>
+<% if test "$FORM_page" = "new_cont"; then new_container; fi %>
+<% if test "$FORM_page" = "del_cont"; then del_last_cnt; gotopage "$rwcgi=status"; fi %>
+
+<% if test "$FORM_page" = "lst_usbr"; then 
+ [[ "$authlevel" -gt "2" ]] && need_auth
+mkform %>
+<% if [[ "$(isactsrv usbsrvd)" = "0" ]] ; then %>
+ <p>Ключи эмулятора в доступе USB редиректора. Раздача <%= $(usbr_share) %></p>
+<% listuwtxt %>
+<% else %>
+USB редиректор отключен.<br> Настройки и информация доступны только при запущенном сервисе.
+<% fi %>
+  </form>
+<% fi %>
+
+<% if test "$FORM_page" = "set_usbr"; then
+if [[ "$(isactsrv usbsrvd)" != "0" ]] ; then %>
+USB редиректор отключен.<br> Настройки и информация доступны только при запущенном сервисе.
+<% else 
+ [[ "$authlevel" -gt "1" ]] && need_auth 
+mkform "usbrf"
+%>
+<p>Настройки USB редиректора</p>
+<table>
+<tr><th rowspan="2">ID</th>
+<th rowspan="2">Ключ</th>
+<th rowspan="2">Порт</th>
+<th rowspan="2">Статус. Кем используется.</th>
+<th rowspan="2">Исключить</th><th colspan="2">Раздавать</th><th rowspan="2">Дать имя</th><th rowspan="2">Отмена<br>имени</th></tr>
+<tr><th>Да</th><th>Нет</th></tr> 
+<% listuweb %>
+</table>
+<% [[ "$(usbr_share)" =~ "авт"* ]] && auto_on="checked" || auto_on="" %>
+<p> Автораздача<input type="checkbox" id="ua_share" name="ua_share"  <%= "$auto_on" %> ></p>
+<input type="checkbox" id="ua_sh0" name="ua_sh0" style="display:none"  <%= "$auto_on" %> >
+<p></p> 
+<p><input type=submit value="Применить" ></p> 
+<% fi %>
+  </form>
+<% fi %>
+
+<% if test -n "$FORM_usb_num"; then 
+if [ "$FORM_ua_share" != "$FORM_ua_sh0" ]; then
+  [[ "$FORM_ua_share" = "on" ]] && newsts=1 || newsts=0;
+fi
+for (( j=0; j<= $FORM_usb_num; j++)) 
+do
+  shid="FORM_ushid$j" ;  curid=${!shid}
+  uexc="FORM_uexc$j"  ;  excl=${!uexc}  
+  sts="FORM_ushr$j"   ;  shsts=${!sts}
+  vnm="FORM_ushnm$j"  ;  hnm=${!vnm}
+  vnonm="FORM_hnomm$j";  nonm=${!vnonm}
+  if test -n "$hnm" ; then
+    usbsrv -set-nickname "$hnm" "$curid">/dev/null
+  fi
+  if [ "$nonm" = "on" ]; then
+    usbsrv -set-nickname "" "$curid">/dev/null
+  fi
+  if [ "$excl" = "on" ]; then 
+    usbsrv -t "$curid" >/dev/null
+    usbsrv -add-exclusion "$curid">/dev/null
+  else
+    usbsrv -remove-exclusion "$curid">/dev/null
+    if [ "x$newsts" != "x" -a "$newsts" = "0" ] ; then
+      [[ "$shsts" = "on" ]] && usbsrv -s "$curid">/dev/null || usbsrv -t "$curid">/dev/null
+    fi
+  fi
+  if [ "x$newsts" = "x" -a "x$FORM_ua_share" = "x" ] ; then
+    [[ "$shsts" = "on" ]] && usbsrv -s "$curid">/dev/null 
+    [[ "$shsts" = "off" ]] &&  usbsrv -t "$curid">/dev/null
+  fi
+done
+ if [ "x$newsts" != "x"  ] ; then
+   [[ "$newsts" = "0" ]] && usbsrv -auto-share off>/dev/null || usbsrv -auto-share on>/dev/null;
+ fi
+wmsg
+restartsrv "usbsrvd"
+restartconts
+unset sts shsts shid curid uexc excl vnm hnm vnonm nonm newsts
+sleep 4
+gotopage "$rwcgi=set_usbr" 
+#"Настройки применены"
+fi %>
+
+<% if test "$FORM_page" = "act_virth"; then vh_act; fi %>
+<% if test "$FORM_page" = "net_set"; then 
+ [[ "$authlevel" -gt "0" ]] && need_auth 
+ net_gw=$(ip r | grep default|grep $net_if|cut -d ' ' -f3)
+curnetstate=$(nettype) 
+# 0 - DHCP
+if [ $curnetstate = "0" ] ; then
+  dck="checked";sck="";dsbld="disabled";ipt="dhcp";
+else
+  dck="";sck="checked";dsbld="";ipt="static";
+fi 
+ipapat="\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}" 
+ mkform "sipf" %>
+<table style='font-size : 18px;'><tr>
+<th>Статический IP<input type=radio id="static" name="iptype" value="static" <%= $sck %> onclick="edisable(false)"></th>
+<th colspan="3">DHCP <input type=radio id="dhcp" name="iptype" value="dhcp" <%= $dck %> onclick="edisable(true)"></th></tr>
+<tr><th>Имя хоста:</th><td colspan="3"><input type=text pattern="[a-zA-Z][a-zA-Z0-9\.\-\_]" name=hostname value="<%= $(hostname) %>"></td></tr>
+<tr><th>IP адрес/маска</th><td><input type=text pattern="<%= $ipapat %>" id=sip1 name="hostip" value="<%= $net_ip %>" <%= $dsbld %> ></td><td>/</td><td><input type=text pattern="[0-9]{1,2}" id=sip2 name="netmask" value="<%= $net_msk %>" size ="2" <%= $dsbld %>></td></tr>
+<tr><th>Шлюз:</th><td colspan="3"><input type=text pattern="<%= $ipapat %>" id=sip3 name="gateway" value="<%= $net_gw %>" <%= $dsbld %> ></td></tr>
+<tr><th>DNS:</th><td colspan="3"><input type=text pattern="<%= $ipapat %>" id=sip4 name=dns value="<%= $(netdns) %>" <%= $dsbld %> ></td></tr>
+<tr><th>Часовой пояс:</th><td colspan="3"><input type=text name=tzs value="<%= $(tzsets) %>"></td></tr>
+</table>
+<p><input type=hidden name=o_st value="<%= $ipt %>" >
+<input type=hidden name=o_ip value="<%= $net_ip %><%= $net_msk %><%= $net_gw %><%= $(netdns) %>">
+<input type=hidden name=o_nm value="<%= $(hostname) %>">
+<input type=hidden name=o_tz value="<%= $(tzsets) %>">
+  <p><input type="submit" value="Применить"></p>
+</form>
+<% fi %>
+
+<% if test -n "$FORM_iptype"; then %>
+  <% if test "$FORM_iptype" = "dhcp"; then 
+       if [[ "$FORM_iptype" != "$FORM_o_st" ]]; then          # тип сети  изменился на dhcp
+         prep_net "dhcp" "$FORM_iptype"
+       fi
+     else
+      if [[ "$FORM_iptype" != "$FORM_o_st" ]] || [[ "$net_ip$net_msk$FORM_gateway$FORM_dns" != "$FORM_o_ip" ]]; then 
+         # тип сети  изменился на static
+      prep_net "static" "$net_ip" "$net_msk" "$FORM_gateway" "$FORM_dns"
+    fi
+  fi 
+  if ! [[ "$FORM_tzs" == "$FORM_o_tz" ]]; then
+    set_tz "$FORM_tzs" 
+  fi
+  if [[ "$FORM_hostname" != "$FORM_o_nm" ]]; then
+    set_hostname "$FORM_hostname"
+  fi %>
+<%   gotopage "$rwcgi=net_set" %>
+<% fi %>
+
+<% if [[ "$FORM_page" =~ "tmp_text_" ]]; then 
+bakurl=${FORM_page:9}
+ mkform %>
+<textarea name="tmp_txt" wrap="virtual" cols="120" rows="40"><% cat /tmp/tmp.txt %></textarea>
+ <p><input type=submit value="Ok"></p>
+ <input type="hidden" name="tmp_txt_ok" value="<%= $bakurl %>" />
+ </form> 
+<% fi %>
+
+<% if test -n "$FORM_tmp_txt_ok"; then 
+rm /tmp/tmp.txt; 
+gotopage "$rwcgi=$FORM_tmp_txt_ok" 
+fi %>
+
+<% if test "$FORM_page" = "do_cmd"; then 
+[[ "$authlevel" -gt "1" ]] && need_auth
+mkform %>
+<p>Команда</p>
+<input type="text" width="90" name="cmd_toexec" size="80">
+<p><input type=submit value=Выполнить></p>
+</form>
+<% fi %>
+
+<% if test -n "$FORM_cmd_toexec" ; then %>
+<textarea name="cmd_output" wrap="virtual" cols="120" rows="30"><% eval "$FORM_cmd_toexec" %></textarea>
+<% fi %>
+
+<%# отправка файла %>
+<% if test "$FORM_page" = "send_file"; then 
+[[ "$authlevel" -gt "1" ]] && need_auth %>
+<form action="<% echo -n $SCRIPT_NAME %>" method=POST enctype="multipart/form-data" >
+  <input type=file name=uploadfile>
+  <input type=submit value=Отправить>
+  <br>
+</form>
+<% fi %>
+
+<% if test -n "$HASERL_uploadfile_path"; then %>
+  Загружен <b><% echo -n $FORM_uploadfile_name %></b><br>
+  размер:  <% cat $HASERL_uploadfile_path | wc -c %> </p><br>
+<% [ ! -d $down_dir ] && mkdir $down_dir; 
+   cp -f $HASERL_uploadfile_path $down_dir$FORM_uploadfile_name 
+   [ -f $down_dir$FORM_uploadfile_name ] && echo "Сохранен как $down_dir$FORM_uploadfile_name"||  echo "Что-то пошло не так1" 
+fi %>
+<%# прием файла %>
+<% if test "$FORM_page" = "get_file"; then 
+[[ "$authlevel" -gt "2" ]] && need_auth
+mkform %>
+<p> Скачать файл. Укажите полный путь к файлу.</p>
+<input type="text" width="30" name="file_toget" size="30">
+<input type=submit value="Подготовить ссылку">
+</form>
+<% fi %>
+
+<% if test -n "$FORM_file_toget" ; then 
+  download_file $FORM_file_toget 
+fi %>
+
+<% if test "$FORM_page" = "pwr_vm"; then 
+[[ "$authlevel" -gt "1" ]] && need_auth
+mkform %>
+<p> Выключение, или перезагрузка виртуальной машины<br>
+ Не следует злоупотреблять этим пунктом</p>
+<p>Выключение применяется сразу, перезагрузка - через минуту<br>
+с возможностью отменить командой<br> <b>shutdown -c </b>
+</p><p> </p><p>  
+<input type="radio" name="pwr_act" value="shutdown -r -t 1">     Перезагрузить<br>
+<input type="radio" name="pwr_act" value="poweroff">     Выключить<br>
+</p>
+<input type=submit value="Применить">
+</form>
+<% fi %>
+
+<% if test -n "$FORM_pwr_act"; then  ${FORM_pwr_act} ; fi %>
+<% if test "$FORM_page" = "sys_notready"; then  gotopage "$rwcgi=status" " Пока не готово.\n В процессе... " ; fi %>
+
+<% if test "$FORM_page" = "sys_update"; then
+[[ "$authlevel" -gt "1" ]] && need_auth
+ if [[ -f /tmp/up.log ]]; then
+  msg=$(cat /tmp/up.log); rm /tmp/up.log
+  gotopage "$rwcgi=status" "$msg"
+ fi
+ mkform %>
+<% 
+#upd_list=$(cd $down_dir; ls update.*.tar.gz 2>/dev/null)
+upd_list=$(cd $down_dir; find .  -type f -regex '.*\(tar\.gz\|deb\).*'|cut -d/ -f2)
+if [[ -z $upd_list ]]; then 
+echo "<p> Обновлений не обнаружено </p> "
+ else %>
+<select name="fl_upd" required="required" >
+  <option value="">Выберите обновление</option>
+<% for uf in $upd_list; do 
+echo  "<option value='$uf'>$uf</option>"
+done
+echo "</select>"
+%>
+<p><input type=submit value="Установить обновление"></p>
+<% fi %>
+  </form>
+<% fi %>
+
+<% if test -n "$FORM_fl_upd"; then 
+   mk_update "$FORM_fl_upd"
+fi %>
+
+<% if test "$FORM_page" = "vh_keys"; then 
+[[ "$authlevel" -gt "1" ]] && need_auth
+mkform %>
+<b>Проброс ключей USBIP VirtualHere</b><br>
+    Ключи в доступе<br><br>
+<% list_vh %>
+<p><input name="edvhk" type=submit value="Сменить статус отмеченных ключей"></p>
+<p><input name="noblvh" type=submit value="Разблокировать все ключи"></p>
+<p><input name="opt_vh" type=submit value="Оптимальный режим"></p>
+<%# <br><input name="opt_vh" type="checkbox"> Оптимальный режим<br> %>
+Оптимальный режим блокирует ключи, раздаваемые USB редиректором и HASP LM<br>
+Возможна неполная блокировка ключей, если один и тот же ключ задействован<br>
+в нескольких контейнерах. Тогда только вручную исключать коллизии.
+<%# <p><input name="noblvh" type=submit value="Разблокировать все ключи"></p> %>
+<%# <input name="edvhk" type=hidden value="1"> %>
+</form>
+<% fi %>
+
+<% if test -n "$FORM_edvhk"; then
+  blked_keys=$(mkvh_blocked)
+  if [[ ! -z "$blked_keys" ]]; then
+    IFS=';' read -ra bks<<<$blked_keys
+    for kkk in "${bks[@]}" ; do
+      kk=$(echo "$kkk"|cut -d ',' -f1)
+      fld="FORM_vhk_d$(echo $kk|tr -s '-' '_')"; fldv=${!fld}
+      if [[ $fldv = 'on' ]]; then
+        kp=$(echo "$kkk"|cut -d ',' -f2);  vh_unblock "$kp"
+      fi
+    done     
+  fi
+  vhkeys=$(vh_ks ":")
+  if [[ ! -z "$vhkeys" ]]; then
+    for kkk in $vhkeys ;do
+      kk=$(echo $kkk|cut -d: -f1);kp=$(echo $kkk|cut -d: -f2);
+      fld="FORM_vhk_e$(echo $kk|tr -s '-' '_')";fldv=${!fld} 
+      if [[ $fldv = 'on' ]]; then
+        vh_block "$kp"
+      fi
+    done 
+  fi
+  wmsg
+  restartsrv "virtualhere"
+  gotopage "$rwcgi=vh_keys"
+fi %>
+
+<% if test -n "$FORM_noblvh"; then
+sed -i '/IgnoredBuses/d' /etc/virtualhere/config.ini
+  wmsg ; restartsrv "virtualhere"
+  gotopage "$rwcgi=vh_keys"
+fi %>
+
+<% if test -n "$FORM_opt_vh"; then
+  vh_opt;  wmsg;  restartsrv "virtualhere"
+  gotopage "$rwcgi=vh_keys"
+fi %>
+<%# ================== %>
+<hr>
+<small><center>Copyright &copy; SchSoft & Yurykk22    <%# </small> %>
+</body>
+
+<script>
+var dropdown = document.getElementsByClassName("dn-btn");
+var i;
+for (i = 0; i < dropdown.length; i++) {
+  dropdown[i].addEventListener("click", function() {
+    this.classList.toggle("active");
+    var dropdownContent = this.nextElementSibling;
+    if (dropdownContent.style.display === "block") {
+      dropdownContent.style.display = "none";
+    } else {
+      dropdownContent.style.display = "block";
+    }
+  });
+}
+</script>
+</html>
+
+<%# 
+<meta http-equiv="Refresh" content="30"
+%>
+

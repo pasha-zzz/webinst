@@ -1,0 +1,34 @@
+<% max_dumps=7
+ARCH=$(uname -m)
+max_containers=10
+usbhaspd_dumps_dir="/etc/usbhaspd/keys/"
+dumps_source_dir="/opt/hec/keydumps/"
+control_conf="/opt/hec/control.conf"
+hasplm_config="/etc/hasplm/hasplm.conf"
+usbsrvd_config="/etc/usbsrvd.conf"
+vh_config="/etc/virtualhere/config.ini"
+vh_activator="/opt/hec/bin/.activator"
+[[ "$ARCH" == "i686" ]] && vh_mod="vhusbdi386" || vh_mod="vhusbdx86_64"
+net_config_type=1
+net_config="/etc/network/interfaces"
+rwcgi="/cgi-bin/hemu?page"
+alllogs="syslog,messages,usbsrvd.log,kern.log,daemon.log,ufw.log,user.log"
+down_dir="/home/ruboard/"
+usbhasp_daemon="usbhaspd"
+usbhasp_daemon_pre="usbhaspdpre"
+containers_dir="/etc/usbhaspd/keys/"
+dumps_dir="/opt/hec//keydumps/"
+ruboard_dir="/home/ruboard/"
+initramfs_config="/etc/initramfs-tools/initramfs.conf"
+initramfs_modules="/etc/initramfs-tools/modules"
+samba_config="/etc/samba/smb.conf"
+webver=2.06
+authlevel=1
+zram_service="zramswap"
+haspinfo=$(which usbhaspinfo)
+waitmsg="Процесс пошел. Ждем-с......."
+he_ver () {(
+if [[ -f /opt/hec/ctools ]];then  . /opt/hec/ctools; else version_text="2.4.5"; fi
+ echo "$version_text"
+)}
+%>

@@ -1,0 +1,70 @@
+function ischanged() {
+    document.getElementById('lm2save').value = 1;
+};
+
+function edisable(state) {
+document.getElementById("static").checked = !state
+document.getElementById("dhcp").checked = state;
+for (var i = 1; i <= 4; i++)
+document.getElementById("sip" + i).disabled = state
+}
+
+function swp_shr(checkbox,num) {
+nmry="ushry" + num
+nmrn="ushrn" + num
+  if(checkbox.checked){
+    document.getElementById(nmry).checked= '';
+    document.getElementById(nmry).style.display="none";
+    document.getElementById(nmrn).style.display="none";
+  } else{
+    document.getElementById(nmry).style.display="inline";
+    document.getElementById(nmrn).style.display="inline";
+  }
+}               
+
+
+function togtbl(checkBox) {
+ var i;
+ for (i = 1; i < arguments.length; i++) {
+    // result += arguments[i] + separator;
+    console.log('Пар'+ arguments[i] );
+   if (checkBox.checked ){
+     document.getElementById(arguments[i]).style.display="inline";
+   } else {
+    document.getElementById(arguments[i]).style.display="none";
+   }
+ }
+}
+
+function runcmd(sndr,cmd) {
+if (sndr.type && sndr.type === 'checkbox') {
+  loc="/cgi-bin/hemex?page=docmd_" + cmd + "_" + ((sndr.checked) ? '1' : '0');
+  //sndr.checked=!sndr.checked
+} else {
+  loc="/cgi-bin/hemex?page=docmd_" + cmd + '_' + sndr.value;
+}
+  window.location.assign(loc);
+}
+
+function runcmd0(checkBox,cmd) {
+if (checkBox.type && checkBox.type === 'checkbox') {
+  loc="/cgi-bin/hemex?page=docmd_" + cmd + "_" + ((checkBox.checked) ? '1' : '0');
+} else {
+  loc="/cgi-bin/hemex?page=docmd_" + cmd + '_' + checkBox.value;
+}
+  window.location.assign(loc);
+}
+
+function runcmd2(control,cmd) {
+if (control.type && control.type === 'checkbox') {
+  loc="/cgi-bin/hemex?page=docmd_" + cmd + "_" + ((checkBox.checked) ? '1' : '0');
+} else {
+//  if (control.type && control.type === 'select') {
+//  loc="/cgi-bin/hemex?page=docmd_" + cmd + "_" + control.value;
+//} else {
+  loc="/cgi-bin/hemex?page=docmd_" + cmd ;
+}
+  window.location.assign(loc);
+}
+
+//if ((checkBox || {}).type === 'checkbox') { }

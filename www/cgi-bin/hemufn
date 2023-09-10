@@ -1,0 +1,598 @@
+<%in hemuvars %>
+<% net_if=$(ip -br link show | grep 'enxb[0-9]\|en.[0-9]\|eth[0-9]' | awk '{print $1}') %>
+<% net_ip=$(ip -br address show | grep "$net_if" | awk '{print $3}' | cut -d'/' -f1) %>
+<% net_msk=$(ip -br address show | grep "$net_if" | awk '{print $3}' | cut -d'/' -f2) %>
+<% version=$(he_ver|cut -d ' ' -f1) %>
+<%in transf %>
+
+<% [[ -f /tmp/webcache ]] || getminport 
+. /tmp/webcache 
+%>
+<% pr_ln(){
+ echo -n "<hr  align='left'  width='$1%'>"
+} %>
+
+<% getuar(){
+local usbrl=$(usbsrv -l)
+local lsur=$(echo "$usbrl"|grep : |sed ':a;N;s/\n //;/\n/{P;D;};$!ba'|sed 's/ \{1,\}/ /g;s/[0-9]:/\n\0/g')
+lsur=$(echo "$lsur"|sed '/^.*0529.*$/!d;/^[[:space:]]$/d;s/not/не/g;s/plugged/доступен/g;s/auto/авто/g;s/shared/раздается/g;s/in use by/берет/g;s/in exclusion list/исключен/g')
+echo "$lsur" |sed 's/ HASP HL 3.25 //g;s/ Vid: 0529 Pid: 0001 //g;s/Port: /:/g;s/ Status: /:/g;s/: /:/g'
+}
+
+%>
+<% listuwtxt() {
+echo "<table style='font-size : 16px;'><tr><th>ID</th><th>Ключ</th><th>Порт</th><th>Состояние, кем используется</th></tr>"
+while IFS= read -r st; do
+kid=$(echo "$st"|cut -d: -f1)
+knm=$(echo "$st"|cut -d: -f2)
+kpr=$(echo "$st"|cut -d: -f3)
+kst=$(echo "$st"|cut -d: -f4)
+echo "<tr><td align='center'>$kid</td><td>" $knm"</td><td align='center'>$kpr</td><td>$kst</td></tr>"
+done <<< $(getuar)
+echo "</table>"
+} %>
+
+<% listuweb() {
+j=0
+while IFS= read -r ust; do
+    curstr="$ust" 
+    ckdex="";[[ "$curstr" == *"исключен"* ]] && ckdex="checked";
+    ckdsh="";[[ "$curstr" == *"раздается"* || "$curstr" == *"берет"* ]] && ckdsh="checked";
+    strad="";[[ "$ckdex" = "checked" ]] && strad="style=\"display:none\"";
+    uid=$(echo $curstr|cut -d ':' -f1)
+#    curstr=${curstr/"$uid: "/}
+    knm=$(echo "$curstr"|cut -d ':' -f2)
+    prt=$(echo "$curstr"|cut -d ':' -f3)
+    sts=$(echo "$curstr"|cut -d ':' -f4)
+    echo ""
+    echo "<tr><td><input type=text name=\"ushid$j\" readonly size=\"2\" value=\"$uid\" ></td>"
+    echo "<td>$knm</td><td align='center'>$prt</td><td>$sts</td><td align='center'><input type=\"checkbox\" name=\"uexc$j\" value=\"on\" $ckdex onclick='swp_shr(this,$j);' ></td>"
+    echo "<td align='center'><input type=radio id=\"ushry$j\" name=\"ushr$j\" $strad value=\"on\" $ckdsh></td><td align='center'><input type=radio id=\"ushrn$j\" name=\"ushr$j\" $strad value=\"off\"></td>"
+    echo "<td><input type=text  name=\"ushnm$j\" size=\"10\"></td>"
+    echo "<td align='center'><input type=checkbox  name=\"hnomm$j\" value=\"on\" ></td></tr>"
+    (( j++ ))
+done <<< $(getuar)
+echo "<input type=hidden name=usb_num value=\"$j\">"
+} %>
+
+<% finduid () {
+systemctl is-active --quiet usbsrvd || return 1
+while IFS= read -r st; do
+    uid=$(echo "$st"|cut -d ':' -f1)
+    if [[ "$st" =~ .*$1.*$2* ]] ; then  xuid="0000000$( printf "%x" $uid )";   break; fi
+done <<< $(getuar)
+[[ -z "$xuid" ]] || echo "${xuid: -8}"
+} %>
+
+<%#  fn doanysrv  %>
+
+<% wmsg() { 
+echo "<h2 id="blink2" >$waitmsg</h2>"; 
+} %>
+
+<% startsrv (){ systemctl is-active --quiet $1 && return 1;   systemctl start --quiet $1; } %>
+<% stopsrv (){ systemctl is-active --quiet $1 || return 1;  systemctl stop --quiet $1; } %>
+
+<% enablesrv (){
+if [[ "$(isenasrv $1)" -gt "0" ]];then
+  systemctl enable --quiet $1
+  [[ "$1" =~ "usbhaspd"* ]] && systemctl enable --quiet "usbhaspdpre@$(echo $1|cut -d@ -f2)"
+fi
+} %>
+
+<% disablesrv (){  
+if [[ "$(isenasrv $1)" -eq "0" ]];then
+systemctl disable --quiet $1
+  [[ "$1" =~ "usbhaspd"* ]] && systemctl disable --quiet "usbhaspdpre@$(echo $1|cut -d@ -f2)"
+fi
+} %>
+
+<% restartsrv (){  systemctl is-active --quiet $1 || return 1;
+   systemctl restart --quiet $1; } %>
+
+<% restartconts (){
+cnt_nums=$(num_cnts)
+if [[ "$cnt_nums" -gt "0" ]] ; then
+for (( i = 1; i <= $cnt_nums; i++)) ; do restartsrv "usbhaspd@$i"; done
+restartsrv "hasplm"
+restartsrv "virtualhere" 
+fi
+} %>
+<% isactsrv (){ systemctl is-active --quiet $1; echo "$?";} %>
+<% isenasrv (){ systemctl is-enabled --quiet $1; echo "$?";} %>
+
+<% usbr_share(){
+  cat /etc/usbsrvd.conf|grep manualsharing>/dev/null; 
+  [[ "$?" = "1" ]] && echo "автоматическая" || echo "ручная"; } %>
+
+<% hlm_info(){
+echo -e "[NH_COMMON]\nNH_TCPIP = Enabled\n[NH_TCPIP]\nNH_SERVER_ADDR = 127.0.0.1\nNH_USE_BROADCAST = Disabled" > /run/nethasp.ini
+hlminfo=$($haspinfo -c /run/nethasp.ini|grep HASP)
+rm -f /run/nethasp.ini
+echo "$hlminfo"
+} %>
+
+<% hstat () {
+netst=$(ip -br address show | grep "$net_if" | awk '{print $2}') 
+echo "Сеть: интерфейс - $net_if, статус - $netst, адрес - $net_ip, имя хоста - $(hostname)"
+pr_ln 93
+echo  "Память:       всего       в деле     свободно      общая     буф/кеш    доступно"
+free |grep Mem
+dfr=$(df -h / |grep dev | tr -s "\t " "/"|cut -d '/' -f4,6|sed 's,/, из них свободно ,g;s,G, Гб,g;s,M, Мб,g')
+echo "Диск: $dfr"
+pr_ln 93
+ast="Автостарт: "
+serv=usbhaspd
+haspstatus=0
+ps -e|grep usbhasp>/dev/null
+if [ "$?" = "0" ];   then
+  haspstatus=1
+fi
+if [ "$haspstatus" = "1" ]; then
+    echo  "HASP эмулятор  запущен. Задействовано контейнеров: $(num_cnts)"
+  keylist="$(ls /etc/usbhaspd/keys/*/*.json |cut -d/ -f5-|sed 's,/,-,g;s,.json,,g')";
+  [[ -z $keylist ]] && echo -e "Ключей нет\n" || printkeys
+else
+  echo "USBhasp эмулятор выключен."
+fi
+pr_ln 60
+serv=usbsrvd
+systemctl is-enabled --quiet "$serv"
+if [ $? = "0" ] ;then astr="${ast}Да"; else astr="${ast}Нет"; fi
+systemctl is-active --quiet "$serv"
+if [ "$?" = "0" ];   then
+    echo "USB редиректор запущен. $astr. Доступные ключи:"
+listuwtxt
+usbrclnts
+[[ "$haspstatus" = "0" ]] && echo -e "<b>HASP эмулятор не  запущен.</b> Информация о ключах условна."
+else
+  echo "USB редиректор выключен. $astr."
+fi
+pr_ln 62
+serv=virtualhere
+systemctl is-enabled --quiet "$serv"
+if [ $? = "0" ] ;then astr="${ast}Да"; else astr="${ast}Нет"; fi
+systemctl is-active --quiet "$serv"
+if [ "$?" = "0" ];   then
+    echo -e "VirtualHere запущен. $astr. \nКлючи в доступе"
+vh_ks " порт "
+echo "<br>Блокированые ключи" 
+if [[ -z $(cat /etc/virtualhere/config.ini|grep ^IgnoredBuses) ]]; then 
+echo "Нет"
+ else  vh_blocked "nobr"; fi
+else
+  echo "VirtuaHere выключен. $astr."
+fi
+pr_ln 64
+serv=hasplm
+systemctl is-enabled --quiet "$serv"
+if [ $? = "0" ] ;then astm="${ast}Да"; else astm="${ast}Нет"; fi
+systemctl is-active --quiet "$serv"
+if [ "$?" = "0" ];   then
+  ps -e|grep usbhasp>/dev/null
+  if [ "$haspstatus" = "0" ]; then
+    echo -e "HASP LM  запущен. $astm. Ключи недоступны"
+    echo -e "HASP эмулятор не  запущен."
+  else
+    echo -e "HASP LM  запущен. $astm.       Инфо о лицензиях:"
+    lminfo=$(hlm_info |grep HASP|sed 's/network/сетевой/')
+    if [[ "$lminfo" =~ "CRITICAL"* ]]; then
+      echo "Недоступна. Возможно нет свободных, нераздаваемых ключей."
+    else
+    echo " Hasp                    SN       Тип      В деле  Всего"
+pr_ln 64
+for st in "$lminfo";do echo "$st"; done
+    fi
+  fi
+else
+  echo "HASP LM выключен. $astm."
+fi
+pr_ln 64
+} %>
+
+<% scankeys (){
+for fl in /etc/usbhaspd/keys/*/*.json ; do
+  flnm=$(echo "$fl"|cut -d/ -f6)
+[[ -n $1 ]]  && flnm=$(echo "$flnm"|cut -d. -f2)
+  flsh=$(echo "$fl" |cut -d/ -f5-|sed 's,/,-,g;s,.json,,g')
+  cntnk=$(echo "$flsh"|cut -d. -f1);
+  cntn=$(echo "$cntnk"|cut -d- -f1);  cntb=$(( $cntn+"$shminport" ))
+  cnts="$cntb-$(echo $cntnk|cut -d- -f2)";
+if [[ -n $1 ]] ;then
+  [[ "$2" != *"$cnts"* ]] && echo -e "$flnm$1$cnts"
+else
+  echo "<tr><td align='center'>$cntnk</td><td>$flnm</td><td align='center'>$cnts</td></tr>"
+fi
+done
+} %>
+
+<% printkeys (){
+echo "<table style='font-size : 16px;'><tr><th>Контейнер-ключ</th><th>Имя файла ключа в контейнере</th><th>Порт</th></tr>"
+scankeys 
+echo "</table>"
+} %>
+
+<% vh_ks (){
+b_keys=$(cat /etc/virtualhere/config.ini|grep ^IgnoredBuses)
+scankeys "$1" "$b_keys" 
+} %>
+
+<% list_vh(){
+  vhkeys=$(vh_ks ":")
+  if [[ -n "$vhkeys" ]]; then
+    for kkk in $vhkeys ;do 
+   flnm=$(echo "$kkk"|cut -d: -f1); cnts=$(echo "$kkk"|cut -d: -f2)
+   echo "<input type='checkbox' name='vhk_e$(echo $flnm| tr -s '-' '_')'  > $flnm порт $cnts<br> " 
+  done
+  fi
+echo  "<br> Блокированые ключи<br><br>"
+if [[ -z $(cat /etc/virtualhere/config.ini|grep ^IgnoredBuses) ]]; then 
+  echo "Нет"
+else
+vh_blocked "web"
+fi
+} %>
+
+<% num_cnts() { echo $(ls -d /etc/usbhaspd/keys/*/  | wc -l);} %>
+
+
+<% selkeybytype() {
+echo "<select name='key_sel' required='required'><option value=''>Выберите ключ</option>"
+for ff in /opt/hec/keydumps/*$1.json;do fl=$(echo "$ff" |cut -d/ -f5-);
+echo "<option value=\"$fl\">$fl</option>"; done 
+echo "</select>"
+} %>
+
+<% adddumpkey() {
+cat=/etc/usbhaspd/keys/$2/
+dumps_source_dir=/opt/hec/keydumps/
+if [[ $(ls -l $cat*.json 2>/dev/null | grep "^-" | wc -l) -ge "$max_dumps" ]]
+  then
+    amsg "ОШИБКА: Контейнер переполнен\n"
+    return
+  fi
+ for (( i = 1; i <= $max_dumps; i++))
+  do
+    if [[ -z $(ls $cat$i.*.json 2>/dev/null) ]]; then break; fi
+  done
+  cp $dumps_source_dir$1 $cat$i.$1
+  isact=$(isactsrv "usbhaspd@$2")
+  [[ "$isact" = "0" ]] &&  restartsrv "usbhaspd@$2" || startsrv "usbhaspd@$2";
+} %>
+
+<% del_last_cnt() {
+cnt4del=$(num_cnts)
+stopsrv "usbhaspd@$cnt4del"
+iskeys=$(ls /etc/usbhaspd/keys/$cnt4del/*.json 2>/dev/null)
+if [[ ! -z $iskeys ]] ; then
+  for ff in /etc/usbhaspd/keys/$cnt4del/*.json; do
+   fl=$(echo "$ff"|cut -d/ -f6|sed 's/.json//g')
+    arr=($(echo $fl | tr "." "\n"));
+    del_usbr_key ${arr[0]} $cnt4del ${arr[1]}
+  done
+fi
+rm -rf /etc/usbhaspd/keys/$cnt4del
+disablesrv "usbhaspd@$cnt4del"
+cur_cnt=$((cnt4del-1))
+ [[ "$cur_cnt" -eq "0" ]] && pg2go="status" || pg2go="cnt_ls_$cur_cnt"
+sleep 2
+gotopage "$rwcgi=$pg2go" "Контейнер № $cnt4del остановлен, очищен\nи удален из автозапуска!"
+} %>
+
+<% new_container(){
+last_cnt=$(num_cnts)
+new_cnt=$(("$last_cnt" +1))
+if [[ "$new_cnt" -le "$max_containers" ]]; then 
+  mkdir /etc/usbhaspd/keys/$new_cnt
+  enablesrv "usbhaspd@$new_cnt"
+  gotopage "$rwcgi=cnt_adk_$new_cnt"
+else
+  amsg "Количество контейнеров уже под завязку"
+fi
+} %>
+
+<% ck_pwd() {
+ salt=$(cat /etc/shadow | grep root | cut -d: -f2 | cut -d$ -f3)
+ if test "$(mkpasswd -m sha-512 "$1" "$salt")" = "$(cat /etc/shadow | grep root | cut -d: -f2)"; then    return 1;
+ else  return 0;
+ fi
+} %>
+
+<% vh_act(){
+sed -i '/^ServerName=\|^License=/d' $vh_config
+echo "ServerName=\$HOSTNAME\$" >> $vh_config
+echo $($vh_activator $vh_mod $(cat /sys/devices/virtual/dmi/id/product_uuid) | grep '^License=') >>$vh_config
+gotopage "$rwcgi=status" "Активация VirtualHere выполнена."
+} %>
+
+<% netdns(){
+  sdns=$(cat /etc/resolv.conf |grep nameserver|cut -d ' ' -f2)
+  net_dns='';for ln in $sdns ; do net_dns+="$ln,"; done
+  net_dns=${net_dns/%,/}
+  echo $net_dns
+} %>
+
+<% tzsets (){  cat /etc/timezone ; } %>
+
+<% nettype (){
+  cat /etc/network/interfaces|grep dhcp >/dev/null
+  echo "$?"
+## 0- dhcp, 1-static
+} %>
+
+<% prep_net(){
+echo "<p>Перенастройка сети.</p><p> Если IP адрес изменится нужно учесть в подключении к вебинтерфейсу</p>"
+case $1 in
+dhcp)
+cat<<-EOF > $net_config
+source /etc/network/interfaces.d/*
+auto lo
+iface lo inet loopback
+auto $net_if
+iface $net_if inet dhcp
+EOF
+restartsrv "networking"
+sleep 3
+;;
+static)
+cat<<-EOF > $net_config
+source /etc/network/interfaces.d/*
+auto lo
+iface lo inet loopback
+auto $net_if
+iface $net_if inet static
+address $2/$3
+gateway $4
+dns-nameservers $5
+EOF
+restartsrv "networking"
+sleep 3
+  ;;
+*)
+  amsg "Настройка сети. Что-то не так";;
+esac
+} %>
+
+<% set_hostname(){
+  hostname $1
+  echo $1 > /etc/hostname
+  sed -i "/^127.0.1.1/c\127.0.1.1 $1" /etc/hosts
+} %>
+
+<% set_tz(){
+  if test -f "/usr/share/zoneinfo/$1" ; then
+    timedatectl set-timezone "$1"
+  else
+    echo "Выбор часового пояся некорректен!">/tmp/tmp.txt
+    echo "Список доступных часовых поясов:">>/tmp/tmp.txt
+    timedatectl list-timezones>>/tmp/tmp.txt
+    gotopage "$rwcgi=tmp_text_net_set"
+  fi
+} %>
+
+<% download_file() {
+   fn=$(basename $1)
+   [ -f /www/f4down ] && rm /www/f4down;
+   ln -sf $1 /www/f4down
+   echo -e "<p><a href=\"/f4down\" download=\"$fn\">Скачать файл $fn</a></p>"
+}%>
+
+<% mk_update() {
+local rv; local msg
+up_deb(){
+dpkg -I "$1" >/dev/null 2>&1;
+if [[ "$?" -eq "0" ]] ; then
+  if [[ $(dpkg -I "$1" | grep 'Package:' | sed 's/^.*: //' | sed 's/[[:space:]]*$//') == 'hec' ]] && [[ ! $(dpkg -I "$1" | grep 'Version:' | sed 's/.*: //' | sed 's/[[:space:]]*$//') > $(dpkg -s hec | grep 'Version:' | sed 's/^.*: //' | sed 's/[[:space:]]*$//') ]]; then
+    rv=1; msg="Версия не новее уже установленной"
+  else  dpkg -i "$1" >/dev/null 2>&1;    rv=$?;  [[ "$rv" -eq "0" ]] || msg="Ошибка установки deb-пакета"; fi
+else  rv=2; msg="Пакет не может быть установлен.\nСкорей всего кривой пакет."
+fi
+}
+
+up_tgz(){
+local tmpd="/tmp/.heupdate"
+mkdir -p $tmpd && tar -xzf $1 -C $tmpd
+[[ "$1" == *"web"* ]] && fromweb="1"
+$tmpd/update.sh "$version" "1" "$fromweb" $1 2>/dev/null
+rv="$?";  rm -rf $tmpd ;[[ "$rv" -eq "0" ]] || msg="Ошибка обновления $rv"
+}
+
+if [ -f "$down_dir$1" ]; then
+  [[ $1 =~ \.deb$ ]] &&  up_deb "$down_dir$1" || up_tgz "$down_dir$1"
+  [[ "$rv" -eq "0" ]] && msg="Обновление установлено" 
+  amsg "$msg"
+  [[ "$1" == *"web"* ]] && restartsrv "httpd"
+else
+  amsg "Не обнаружен файл обновления в папке $down_dir"
+fi
+}%>
+
+<% hasplm_ulist () {
+if [[ -n $(cat $hasplm_config 2>/dev/null | grep '^NHS_USERLIST') ]]
+  then
+    sed -i "/^NHS_USERLIST/c\NHS_USERLIST     = $1" $hasplm_config
+  elif [[ -n $(cat $hasplm_config 2>/dev/null | grep '^\[NHS_SERVER\]') ]]
+  then
+    sed -i "/^\[NHS_SERVER\]/c\[NHS_SERVER]\nNHS_USERLIST     = $1" $hasplm_config
+  else
+    echo -e "[NHS_SERVER]\nNHS_USERLIST     = $1" >> $hasplm_config
+  fi
+echo 0
+} %>
+
+<% hasplm_srvname () {
+#Пустое поле
+if [[ x"$1" == x ]] ; then
+  [[ -n $(cat $hasplm_config 2>/dev/null | grep '^NHS_SERVERNAMES') ]] && sed -i "/^NHS_SERVERNAMES/d" $hasplm_config
+else
+  if [[ -n $(cat $hasplm_config 2>/dev/null | grep '^NHS_SERVERNAMES') ]]
+  then
+    sed -i "/^NHS_SERVERNAMES/c\NHS_SERVERNAMES  = $1" $hasplm_config
+  elif [[ -n $(cat $hasplm_config 2>/dev/null | grep '^\[NHS_SERVER\]') ]]
+  then
+    sed -i "/^\[NHS_SERVER\]/c\[NHS_SERVER]\nNHS_SERVERNAMES  = $1" $hasplm_config
+  else
+    echo -e "[NHS_SERVER]\nNHS_SERVERNAMES  = $1" >> $hasplm_config
+  fi
+fi
+echo 0
+} %>
+
+<% hasplm_lmnet () {
+#Пустое поле
+if [[ x"$1" == x ]] ; then
+  [[ -n $(cat $hasplm_config 2>/dev/null | grep '^NHS_IP_LIMIT') ]] && sed -i "/^NHS_IP_LIMIT/d" $hasplm_config
+else
+ [[ $1 != *"127.0.0.1"* ]] &&  newlimit="127.0.0.1, $1" || newlimit=$1
+ if [[ -n $(cat $hasplm_config 2>/dev/null | grep '^NHS_IP_LIMIT') ]]
+  then
+    sed -i "/^NHS_IP_LIMIT/c\NHS_IP_LIMIT     = $newlimit" $hasplm_config
+  elif [[ -n $(cat $hasplm_config 2>/dev/null | grep '^\[NHS_IP\]') ]]
+  then
+    sed -i "/^\[NHS_IP\]/c\[NHS_IP]\nNHS_IP_LIMIT     = $newlimit" $hasplm_config
+  else
+    echo -e "[NHS_IP]\nNHS_IP_LIMIT     = $newlimit" >> $hasplm_config
+  fi
+fi
+echo 0
+} %>
+
+<% set_upd_hec () {
+  if [[ -z $(cat $control_conf 2>/dev/null | grep ^update_only_hec) ]]
+  then
+    echo "update_only_hec=$1" >> $control_conf
+  else
+    sed -i "/^update_only_hec/c\update_only_hec=$1" $control_conf
+  fi
+} %>
+
+<% del_cnt_key(){
+if test "$1" -gt "0" ; then 
+  cur_cnt=$2
+  dfil=$(ls /etc/usbhaspd/keys/$2/$1.*.json)
+  kname=$(ls /etc/usbhaspd/keys/$2/$1.*.json|cut -d'.' -f2 )
+  if test -f "$dfil" ; then 
+    rm "$dfil" 
+    [[ "$3" == "on" ]] && del_usbr_key $1 $2 $kname
+    num_keys_in_cnt=$(ls -l /etc/usbhaspd/keys/$2/*.json  | wc -l)
+    if [[ "$num_keys_in_cnt" -gt "0" ]]; then 
+      restartsrv "usbhaspd@$2"  
+    else 
+      del_last_cnt
+      ((cur_cnt--))
+    fi 
+  fi
+else
+  amsg "Ключа с № "$1" нет!" 
+fi
+[[ "$3" == "on" ]] && restartsrv usbsrvd
+
+[[ "$cur_cnt" -gt "0" ]] && gotopage "$rwcgi=cnt_ls_$cur_cnt" || gotopage "$rwcgi=status"
+} %>
+
+<% del_usbr_key(){
+# № ключа, № конт , имя ключа
+    urport=$(( "$2" +"$shminport" ))
+    sh_port="$urport-$1"
+    grep ".*$sh_port.*$3.*" /etc/usbsrvd.conf 1>/dev/null;
+    [[ "$?" -eq "0" ]] &&  sed -i /.*$sh_port.*$3/d /etc/usbsrvd.conf 2>/dev/null
+    if [[ $(isactsrv "usbsrvd") -eq "0" ]]; then
+      usbrid=$(finduid "$3" "$urport-$1") 
+      [[ "x$usbrid" = "x" ]] || sed -i /.*$usbrid.*/d /etc/usbsrvd.conf 2>/dev/null
+    fi
+    vh_unblock $sh_port
+} %>
+
+<% vh_block(){
+b_keys=$(cat /etc/virtualhere/config.ini|grep ^IgnoredBuses|cut -d= -f2)
+sed -i '/IgnoredBuses/d' /etc/virtualhere/config.ini
+if [ "$1" != "0" ]; then
+  kbus="$1"
+  [[ -z "$b_keys" ]] && nb_keys=$kbus || nb_keys="$b_keys,$kbus"
+  echo "IgnoredBuses=$nb_keys">>/etc/virtualhere/config.ini
+fi
+} %>
+
+<% vh_blkbus(){
+b_keys=$(cat /etc/virtualhere/config.ini|grep ^IgnoredBuses|cut -d= -f2)
+sed -i '/IgnoredBuses/d' /etc/virtualhere/config.ini
+[[ -z "$b_keys" ]] && nb_keys="$1" || nb_keys="$b_keys,$1"
+  echo "IgnoredBuses=$nb_keys">>/etc/virtualhere/config.ini
+} %>
+
+<% vh_unblock(){
+b_keys=$(cat /etc/virtualhere/config.ini|grep ^IgnoredBuses|cut -d= -f2)
+nb_keys=''
+if [[ "$b_keys" ]] ; then
+IFS=',' read -a vhar <<< $b_keys
+for elm in "${vhar[@]}"; do 
+[[ "$elm" != "$1" ]] && nb_keys+="$elm,"
+done
+nb_keys=$(echo $nb_keys|sed -e 's/,$//')
+sed -i '/IgnoredBuses/d' /etc/virtualhere/config.ini
+[[ ${#nb_keys} -gt 0 ]] && echo "IgnoredBuses=$nb_keys">>/etc/virtualhere/config.ini
+fi
+} %>
+
+<% vh_opt(){
+sed -i '/IgnoredBuses/d' /etc/virtualhere/config.ini
+if [[ $(isactsrv "usbsrvd") -eq "0" ]]; then
+  usbrsh=$(cat /etc/usbsrvd.conf 2>/dev/null |grep shared|cut -d ':' -f6)
+  for port in $usbrsh; do vh_blkbus "$port"; done
+fi
+if [[ $(isactsrv "hasplm") = "0" ]]; then
+  hlminf=$(hlm_info |sed 's/ \{1,\}/ /g' |tr -s '\n' ',')
+  IFS=$',' read -ra ahminf<<<$hlminf
+  for k in "${ahminf[@]}"; do 
+    kn=$(echo "$k"|cut -d ' ' -f5);kt=$(echo "$k"|cut -d ' ' -f8);
+    kf=$(ls /etc/usbhaspd/keys/*/*$kn*$kt*|cut -d/ -f5-)
+    kbus="$(( $(echo $kf|cut -d/ -f1) + 2 ))-$(echo $kf|cut -d/ -f2|cut -d. -f1)"
+    vh_blkbus  $kbus;
+  done
+fi
+} %>
+
+<% mkvh_blocked(){
+local out_ks
+out_ks=''
+b_keys=$(cat /etc/virtualhere/config.ini|grep ^IgnoredBuses|cut -d= -f2)
+if [[  "$b_keys" ]] ; then
+IFS=',' read -ra bks<<<$b_keys
+for np in "${bks[@]}"; do
+cnt=$(( $(echo "$np"|cut -d '-' -f1)-$shminport ));knn=$(echo "$np"|cut -d '-' -f2)
+knm="$(ls /etc/usbhaspd/keys/$cnt/$knn.*.json|cut -d. -f2)";toadd="$knm,$np;"
+[[ "$knm" ]] && out_ks+="$toadd"
+done
+fi
+echo "${out_ks/%;/}"
+} %>
+
+<% vh_blocked(){
+b_keys=$(cat /etc/virtualhere/config.ini|grep ^IgnoredBuses|cut -d= -f2)
+if [[  "$b_keys" ]] ; then
+  [[ -z "$1" ]] && br="<br>" || br=""
+  IFS=',' read -ra bks<<<$b_keys
+  for np in "${bks[@]}"; do
+    shn=$(echo "$np"|cut -d '-' -f1)
+    cnt=$(( $shn - $shminport )); knn=$(echo "$np"|cut -d '-' -f2)
+    knm="$(ls /etc/usbhaspd/keys/$cnt/$knn.*.json|cut -d. -f2)"
+    knmp="$knm порт $shn-$knn" 
+    if [[ "$knm" ]];then
+      [[ "$1" = "web" ]] && echo "<input type='checkbox' name='vhk_d$(echo $knm|tr -s '-' '_')'  > $knmp<br>" || echo "$knmp$br"
+    fi
+  done
+else
+  echo "Нет"
+fi
+} %>
+
+<% usbrclnts(){
+cllst=$(usbsrv -list-clients|sed '/==.*/d;/^$/d')
+if [[ "$cllst" = *"no client"* ]]; then
+echo "Подключенных клиентов нет"
+else
+cllst=$(echo "$cllst"|sed 's/Client at/Клиент \(хост:порт\)/g;/Platform.*/d;s/Uses device/Использует/g')
+echo "Подключены"
+echo "$cllst"
+fi
+} %>

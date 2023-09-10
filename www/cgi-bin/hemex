@@ -1,0 +1,238 @@
+#!/usr/bin/haserl --shell=/bin/bash --upload-limit=1048576 --upload-dir=/tmp
+Content-type: text/html
+<html lang="ru">
+<%in hemexfn  %>
+<head>
+<script type="text/javascript" src="/hemujs"></script>
+<link rel="stylesheet" type="text/css" href="/hemu.css">
+<meta http-equiv='Content-Type' content='text/html; charset=utf-8'/> 
+</head>
+<body>
+<div class="exmain">
+  <h2><font color=#748d69>HASP Эмулятор  <% hostname %> v.<% he_ver %></font></h2>
+<% if test "$FORM_page" = "samba"; then 
+[[ "$authlevel" -gt "1" ]] && need_auth
+%>
+<b>Настройка сетевого доступа samba </b>
+<form action="<% echo -n $SCRIPT_NAME %>" method='POST'>
+<% serv="smbd" %>
+<p>Службы самбы </p>
+<% s_on=$(isactsrv "$serv")
+[[ "$s_on" -gt '0' ]] && prefa="Не з" || prefa="З" ;
+s_en=$(isenasrv "$serv")
+[[ "$s_en" -gt '0' ]] && suffe="нет" || suffe="да";
+[[ "$s_on" -gt '0' ]] && fstcb="Запустить" || fstcb="Остановить" ;
+[[ "$s_en" -gt '0' ]] && skndcb="В" || skndcb="От"; %>
+<p>Состояние: <%= "$prefaапущены" %>,  <%= "Автостарт - $suffe." %> </p>
+<p>
+<% if [[ "$s_on" -gt '0' ]] ; then %>
+<%= "$fstcb" %> <input type="checkbox" name="sr_togo"  onclick="runcmd(this,<%= "'smbstart'" %>);">
+<% else %>
+<input type="radio" name="act_sr" value="stop" onclick="runcmd(this,<%= "'smbstop'" %>);"/>  <%= "$fstcb" %>
+<input type="radio" name="act_sr" value="rst" onclick="runcmd(this,<%= "'smbrst'" %>);"/>  Перезапустить
+<% fi %>
+<%= "$skndcbключить автостарт" %>  <input type="checkbox" name="sr_toena" onclick="runcmd(this,<%= "'smbena'" %>);">
+</p>
+Общая папка  <input type="text" readonly  name="smb_folder" value="/home/ruboard" /><br><br>
+<b>Зарегистрированые пользователи<br><br>
+<% 
+sulist=$(smb_u_list)
+samba_guest_ok; 
+[[ $? -eq 0 ]] && gueston="checked"
+systemctl is-active --quiet wsdd ; 
+[[ $? -eq 0 ]] && wsddon="checked"
+ for un in $sulist; do 
+dissts=""
+[[ "$un" = "ruboard" ]] && dissts="disabled" || notruboard="1" %>
+<input type=checkbox  name="<%= $un %>" <%= $dissts %>  > <%= $un %><br><br>
+<% done %>
+</b><p>
+<% if [[ "$notruboard" = "1" ]] ; then %>
+<input type="checkbox"  name="usr_del" onclick="togtbl(this,<%= "'subm'" %> );" > Удалить отмеченных пользователей. Ruboard-бессмертный:)<br><br>
+<% fi %>
+<input type="checkbox"  name="gst_ok" <%= $gueston  %> onclick="runcmd(this,<%= "'guestok'" %>);" > Гостевой режим<br><br>
+<input type="checkbox"  name="ws_dl" <%= $wsddon %> onclick="runcmd(this,<%= "'wsdd'" %>);" > Сетевое обнаружение<br><br>
+<input type="checkbox"  id="usr_add" name="usr_add" onclick="togtbl(this,<%= "'tblsmb'" %>,<%= "'subm'" %> );" > Добавить пользователя<br><br>
+<table hidden id="tblsmb"  > 
+<tr><td align="right"><b>Имя: </b></td><td><input type="text" id="smb_newu" name="smb_newu" value="" size ="8" /></td>
+<td align="right"><b>Пароль: </b></td><td><input type="password" id="smb_pwd" name="smb_pwd" value=""  size ="8"/></td>
+<td align="right"><b> Еще пароль: </b></td><td><input type="password" id="smb_pwd2" name="smb_pwd2" value=""  size ="8"/></td></tr>
+</table></p><p>
+<input id="subm" type=submit value="Применить" hidden > <a id="blink" href="/cgi-bin/hemu?page=status">Возврат к меню</a>
+</p>
+<input type="hidden" id="smb_set" name="smb_set" value="1" />
+</form>
+<% fi %>
+<% if test -n "$FORM_smb_set"; then
+if [[ "$FORM_usr_add" = "on" ]] ; then
+  [[  x"$FORM_smb_newu" = x"" ]] && amsg "Не задано имя пользователя"
+  [[  x"$FORM_smb_pwd" = x"" ]] && amsg "Не задан пароль  пользователя"
+  [[ $FORM_smb_pwd != $FORM_smb_pwd2 ]] && amsg "Пароли не совпадают"
+  samba_user_add "$FORM_smb_newu" "$FORM_smb_pwd"
+  amsg "Пользователь $FORM_smb_newu добавлен"
+fi
+if [[ "$FORM_usr_del" = "on" ]] ; then
+r_ulst=$(smb_u_list)
+r_ulst=$(echo "$r_ulst"|sed 's/ruboard//g')
+ for un in $r_ulst; do 
+ fldnm="FORM_$un";ckv=${!fldnm};
+ [[ "$ckv" = "on" ]] && samba_user_del "$un"
+ done
+fi
+  gotopage "/cgi-bin/hemex?page=samba"
+fi %>
+
+<% if [[ "$FORM_page" =~ "docmd_"* ]]; then
+[[ "$authlevel" -gt "1" ]] && need_auth
+#cmd=$FORM_page
+#bakurl="/$(echo $HTTP_REFERER |cut -d/ -f4-)"
+proc_cmd "$FORM_page" "/$(echo $HTTP_REFERER |cut -d/ -f4-)"
+fi %>
+
+<% if test "$FORM_page" = "fwl_set"; then 
+[[ "$authlevel" -gt "1" ]] && need_auth %>
+<b>Настройка сетевого экрана входящих подключений 
+<br>Внимание!</b><br><em>Неправильная настройка может привести к потере доступа по SSH (порт 22),<br>или в вебинтерфейсе (порт 80) при включенном файерволе.</em>
+<form action="<% echo -n $SCRIPT_NAME %>" method='POST'>
+<% serv="ifw" %>
+<p>Служба файервола </p>
+<% fs_on=$(ufw status | grep " active" )
+[[ -z $fs_on ]] && prefa="От" || prefa="В"; %>
+<p>Состояние: <%= "$prefaключен" %> </p>
+<% if [[ -z $fs_on ]] ; then %>
+Включить <input type="checkbox" name="sr_togo"  onclick="runcmd(this,<%= "'fwstart'" %>);">
+<% else %>
+Отключить <input type="checkbox" name="sr_toыез"  onclick="runcmd(this,<%= "'fwstop'" %>);">
+<% fi %>
+<p>
+<% if [[ ! -z $fs_on ]] ; then %>
+<% nrules=$(ufw status numbered |sed 1,4d |sed 's/\[ /\[/g;s/ALLOW/Открыт/g;s/DENY/Закрыт/g;s/IN/Вх./g;s/Anywhere/Любой/g') %>
+     Действующие правила
+<table>
+<tr><th>№</th><th>Порт</th><th colspan="2">Разрешение</th><th>Источник</th></tr> 
+<% while IFS= read -r line ; do read -a ar <<< $line 
+vl=$(echo ${ar[0]} | sed 's/\[//g;s/\]//g')
+%>
+<tr><td><%= $vl %></td><td><%= ${ar[1]} %></td><td><%= ${ar[2]} %></td><td><%= ${ar[3]} %></td><td align="center"><%= ${ar[4]} %></td></tr> 
+<% done <<< $nrules %>
+</table>
+</p>
+<select name="fw_num"  onchange="runcmd(this,<%= "'fwportdel'" %>);">
+ <option value="">Удалить правило</option>
+<% while IFS= read -r line ; do read -a ar <<< $line ;
+vl=$(echo ${ar[0]} | sed 's/\[//g;s/\]//g')
+fwnm=${ar[1]}
+echo "<option value='$vl'>$vl-$fwnm </option>"
+done <<< $nrules %>
+</select>
+
+<select name="fw_add" onchange="runcmd(this,<%= "'fwportadd'" %>);"> <option value="">Открыть порты приложению</option>
+  <option value='ssh'>22/tcp SSH</option> <option value='www'>80/tcp Веб интерфейс</option>
+  <option value='hasp'>475/udp HASP LM</option> <option value='usbr'>32032/tcp USB редиректор</option>
+  <option value='vher'>Порты VirtualHere</option> <option value='wsdd'>/Порты сетевого обнаружение</option> 
+  <option value='smb'>Порты Самба</option></select>
+<select name="fw_add" onchange="runcmd(this,<%= "'fwportcls'" %>);"><option value="">Закрыть порты приложения</option>
+  <option value='ssh'>22/tcp SSH</option> <option value='www'>80/tcp Веб интерфейс</option>
+  <option value='hasp'>475/udp HASP LM</option> <option value='usbr'>32032/tcp USB редиректор</option>
+  <option value='vher'>Порты VirtualHere</option>  <option value='wsdd'>/Порты сетевого обнаружение</option>
+  <option value='smb'>Порты Самба</option></select><br>
+<input type="checkbox"  onclick="togtbl(this,<%= "'tblfw'" %>,<%= "'fwsubm'" %> );"> Добавить правило вручную<br>
+<table id="tblfw" hidden> 
+<tr><th>Порт</th><th>Протокол</th><th>Разрешение</th><th>Место</th><th>Источник</th>
+<tr><td><input type="text" size=5 name="prtnum" pattern="^[1-9][0-9]{0,4}$"></td><td>
+<select required="required" name="prot"> <option value="">Протокол</option> <option value="proto tcp">tcp</option>
+ <option value="proto udp">ulp</option> <option value=" ">оба</option></select></td><td>
+<select required="required" name="alden"> <option value="">Разрешение</option>
+ <option value="allow">Открыть</option> <option value="deny">Закрыть</option></select></td><td>
+<select required="required" name="topbtm"> <option value="">Место</option>
+ <option value="insert 1">В начало</option> <option value=" ">В конец</option></select></td><td>
+<input type="text"  name="prtnet" value="0.0.0.0/0" pattern="^[0-2]?[0-9]{1,2}(\.[0-2]?[0-9]{1,2}){3}(\/[0-3]?[0-9])?$"></td>
+</table><br>                              
+<input id="fwsubm" type=submit value="Применить" hidden> 
+<% else %>
+<b>Настройки отображаются при включенном файерволе</b><br><br>
+<% fi %>
+<a id="blink"  href="/cgi-bin/hemu?page=status">Возврат к меню</a>
+</form>
+<% fi %>
+
+<% if test -n "$FORM_prtnum"; then 
+mkfwrule $FORM_prtnum "$FORM_prot" $FORM_alden "$FORM_topbtm" $FORM_prtnet
+gotopage "/cgi-bin/hemex?page=fwl_set"
+ fi %>
+
+<% if test "$FORM_page" = "log_view"; then %>
+<form action="<% echo -n $SCRIPT_NAME %>" method='POST'>
+<a id="blink" href="/cgi-bin/hemu?page=status">Возврат к меню</a>
+<input type='checkbox' name='today'>  Только за сегодня 
+<select name="log_fl" required="required" "> 
+  <option value="">Выберите лог</option>
+<% select_log %>
+</select>
+<input id="sh_log" type=submit value="Просмотреть"> 
+ </form>
+<% fi %>
+
+<% if test -n "$FORM_log_fl"; then
+ffnm="/var/log/$FORM_log_fl"
+ mkform %>
+<p><%= "Просмотр  $ffnm" %><a id="blink" href="/cgi-bin/hemu?page=status">Возврат к меню</a><a  href="/cgi-bin/hemex?page=log_view">Назад к логам</a>  </p>
+<pre>
+<% [[ "$FORM_today" = "on" ]] && print_log $ffnm "1" || print_log $ffnm %>
+</pre>
+<p>
+  </form>
+<% fi %>
+
+<% if test "$FORM_page" = "clea_down"; then %>
+<form action="<% echo -n $SCRIPT_NAME %>" method='POST'>
+<a id="blink" href="/cgi-bin/hemu?page=status">Возврат к меню</a>
+<% list_dn %>
+ </form>
+<% fi %>
+
+<% if test -n "$FORM_del_down"; then
+lst=$(ls $down_dir)
+for ii in $lst; do
+fld="FORM_dwdel_$(fnhash $ii)"; fldv=${!fld}
+   [[ $fldv = 'on' ]] &&  rm $down_dir$ii
+done
+  gotopage "/cgi-bin/hemex?page=clea_down"
+fi %>
+
+<% if test "$FORM_page" = "auth_lvl"; then
+[[ "$authlevel" -gt "0" ]] && need_auth 
+aular=("Без авторизации" "Критические операции" "Все операци" "Параноидальный")
+#curlvl=$autlevel
+%>
+<form action="<% echo -n $SCRIPT_NAME %>" method='POST'>
+<a id="blink" href="/cgi-bin/hemu?page=status">Возврат к меню</a>
+Текущий уровень: <%= "${aular[$authlevel]}" %>
+<select name="au_lv" required="required" "> 
+
+<option value="">Выберите уровень</option>
+<% select_auth %>
+</select>
+<input id="set_auth" type=submit value="Принять"> 
+ </form>
+<% fi %>
+
+<% if test -n "$FORM_au_lv"; then
+  sed -i "s/authlevel=.*$/authlevel=$FORM_au_lv/" /www/cgi-bin/hemuvars
+  [[ "$FORM_au_lv" -gt "2" ]] && rm /tmp/cokie
+  gotopage "$rwcgi=status" "Теперь режим регистрации\n ${aular[$FORM_au_lv]}"
+fi %>
+
+<% if test "$FORM_page" = "log_off"; then 
+rm /tmp/cokie
+gotopage "$rwcgi=auth_reg" "Осуществлен выход\nБез регистрации дальнейшие действия недоступны"
+fi %>
+
+</div>
+<hr>
+<small><center>Copyright &copy; SchSoft & Yurykk22    
+</body>
+</html>
+
+<%# <script>
+</script> %>

@@ -1,0 +1,72 @@
+<% gotopage() {
+  cat<<-EOF
+<script type="text/javascript">
+  if ("$2") {  alert("$2") }
+    window.location.assign("$1")
+</script>
+</body></html>
+EOF
+exit 0
+} %>
+
+<% amsg() {
+  cat<<-EOF
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd
+<html><head profile="http://www.w3.org/2005/10/profile">
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+  html { height: 100%; }
+  body { height: 100%; font-family: arial,verdana; }
+</style>
+<title></title></head>
+<body>
+  <script type=text/javascript>
+  alert("$1")
+  window.location.assign(document.referrer)
+  </script>
+  </body></html>
+EOF
+  exit 1
+} %>
+
+<% deblog() { 
+echo "$1" >>/tmp/www.log
+} %>
+
+<% check_auth() {
+  if test -f /tmp/cokie ; then
+    cntnt=$(cat /tmp/cokie)
+    tmpl=$(blkid|cut -d '"' -f2|md5sum|head -c 24)
+    if [[ $cntnt = $tmpl ]]; then
+      dtck=$(date +%s -r /tmp/cokie)
+      cdt=$(date +%s)  
+#      if [ $(( $cdt - $dtck )) -lt 1800 ]; then
+    [[ "$authlevel" -lt "3" ]] && tmreg=600 || tmreg=60
+      if [ $(( $cdt - $dtck )) -lt "$tmreg" ]; then
+        touch /tmp/cokie;
+        return 1;
+      else
+        rm /tmp/cokie ;
+      fi
+    fi
+  fi
+  return 0;
+} %>
+
+<% need_auth() {
+   check_auth 
+   if [ $? -eq "0" ] ; then 
+      gotopage "$rwcgi=auth_reg" "Необходима регистрация"
+   fi 
+} %>
+
+<% mkform (){
+[[ -z $1 ]] || fnm="name=$1"
+echo -e "<form $fnm action='/cgi-bin/hemu' method='POST'>"
+} %>
+
+<% getminport(){
+local minp; isald=$(lsusb|grep Aladdin)
+[[ -z "$isald" ]] && minp=$(( $(lsusb|grep root|cut -d ' ' -f2|sort -r|head -n1|sed 's/0//g') )) || minp=$(( "$(lsusb|grep Aladdin|cut -d ' ' -f2|sort |head -n1|sed 's/0//g')" -1))
+echo  "shminport=$minp">/tmp/webcache
+} %>

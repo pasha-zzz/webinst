@@ -1,0 +1,14 @@
+[Unit] 
+Description = WEB server 
+Wants = network.target 
+After = syslog.target network-online.target 
+
+[Service] 
+Type=forking
+ExecStart = /usr/sbin/httpd 
+Restart = on-failure 
+RestartSec = 10 
+KillMode =  mixed
+
+[Install] 
+WantedBy = multi-user.target 

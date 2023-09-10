@@ -1,0 +1,108 @@
+<%in hemuvars %>
+<% 2>/dev/null %>
+<%in transf %>
+<% aular=("Без авторизации" "Критические операции" "Все операци" "Параноидальный") %>
+
+<% isactsrv (){   systemctl is-active --quiet $1 ;  echo "$?";} %>
+<% isenasrv (){  systemctl is-enabled --quiet $1;  echo "$?";} %>
+
+<% smb_u_list () { pdbedit -L | awk 'BEGIN {FS= ":"} {print $1}';} %>
+
+<% openfwports() {
+[[ -z $1 ]] && exit 1
+for prt in $1; do
+ufw allow $prt >/dev/null
+done
+} %>
+
+<% closfwports() {
+[[ -z $1 ]] && exit 1
+for prt in $1; do ufw delete allow $prt >/dev/null;done
+} %>
+
+<% mkfwrule() {
+cmd="ufw $4 $3 from $5 to any port $1 $2"
+${cmd}
+} %>
+
+<% fnhash() {
+echo "$1"|md5sum|sed 's/[[:space:]]*\-$//'
+} %>
+
+<% list_dn() {
+local lst=$(ls $down_dir)
+if [[ ! -z "${lst}" ]]; then
+  echo "<br><br>Состав папки загрузок <br> " 
+  for ii in $lst; do  echo "<input type='checkbox' name='dwdel_$(fnhash $ii)'  > $ii <br> " ;  done
+  echo "<input name='del_down' type=submit value='Удалить отмеченные'> "
+else
+  echo "Папка пустая<br>"
+fi
+} %>
+
+<% select_log () {
+local IFS
+IFS=',' read -ra alog <<< $alllogs
+for fl in ${alog[@]}; do echo "<option value='$fl'>$fl</option>";done
+} %>
+
+<% select_auth () {
+for ii in ${!aular[*]}; do echo "<option value='$ii'>${aular[$ii]}</option>";done
+} %>
+
+<% print_log () {
+ [[ -z $2 ]] && cat $1 || grep -a "$(LC_TIME=en_US.UTF-8 date |cut -d ' ' -f2,3)" $1
+} %>
+
+<%# обработка онлайн команд $1 cmd $2 bakurl  %>
+<% proc_cmd (){
+cmd="$1"; bakurl="$2"
+if [[ $cmd =~ "docmd_fw"* ]]; then
+cmd=${cmd:6}
+[[ $cmd =~ "fwstart"* ]] && firewall_enable 2>/dev/null
+[[ $cmd =~ "fwstop"* ]] && firewall_disable 2>/dev/null
+if [[ $cmd =~ "fwport"* ]]; then
+ if [[ $cmd =~ "fwportdel_"* ]]; then
+  fwnum=${cmd:10}
+  [[ -z $fwnum ]] || ufw --force delete $fwnum 1>/dev/null
+ fi
+ if [[ $cmd =~ "fwportadd_"* ]]; then
+  fwcmd=${cmd:10}
+case $fwcmd in
+ hasp) ports="475/udp" ;;  ssh)  ports="22/tcp" ;;  www) ports="80/tcp";;  usbr) ports="32032/tcp";;
+ vher) ports="7575/tcp 5353/udp";;  wsdd) ports="5357/tcp 3702/udp";;  smb) ports="137/udp 138/udp 139/tcp 445/tcp";;
+ *) ;;
+esac
+openfwports "$ports"
+ fi
+ if [[ $cmd =~ "fwportcls_"* ]]; then
+  fwcmd=${cmd:10}
+  case $fwcmd in
+    hasp) ports="475/udp" ;;  ssh)  ports="22/tcp" ;;  www) ports="80/tcp";;  usbr) ports="32032/tcp";;
+    vher) ports="7575/tcp 5353/udp";;  wsdd) ports="5357/tcp 3702/udp";; smb) ports="137/udp 138/udp 139/tcp 445/tcp";;
+    *) ;;
+  esac
+  closfwports "$ports"
+ fi
+fi
+fi
+if [[ $cmd =~ "docmd_guestok_"* ]]; then
+par=${cmd:14}
+samba_guest $par
+fi
+if [[ $cmd =~ "docmd_wsdd_"* ]]; then
+par=${cmd:11}
+systemctl is-active --quiet wsdd;
+[[ $? -eq 0 ]]  && wsdd_stop || wsdd_start
+fi
+if [[ $cmd =~ "docmd_smb"* ]]; then
+par=${cmd:9}
+case $par in
+  ena_1) systemctl is-enabled --quiet smbd; [[ $? ]]  && samba_disable || samba_enable   ;;
+  start_1) samba_start ;;  rst_rst) samba_restart ;;   stop_stop) samba_stop ;;  *) ;;
+esac
+fi
+gotopage "$bakurl"
+} %>
+<% source /opt/hec/ctools %>
+
